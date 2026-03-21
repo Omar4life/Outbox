@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Send, Sparkles, Zap, Clock, MessageSquare, Check } from 'lucide-react';
+import { Send, Sparkles, Zap, Clock, MessageSquare, Check, Crown } from 'lucide-react';
 
 const Logo = () => (
   <svg width="48" height="48" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -53,78 +53,79 @@ export default function Landing() {
       </header>
 
       {/* Hero */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-4xl mx-auto text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-full text-sm font-medium mb-8">
-            <Sparkles className="w-4 h-4" />
-            Free · 5 emails/day · Powered by AI
-          </div>
-          
-          <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold text-gray-900 mb-6" style={{fontFamily: '"Work Sans", sans-serif'}}>
-            Your cold emails,<br />
-            <span className="text-indigo-600">automated.</span>
-          </h1>
-          
-          <p className="text-xl text-gray-600 mb-10 max-w-2xl mx-auto">
-            Describe who you're reaching out to. Outbox crafts personalized cold emails that sound like <em>you</em> — instantly.
-          </p>
-          
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <button
-              onClick={() => navigate('/auth?mode=signup')}
-              className="px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition-all text-lg"
-              data-testid="hero-cta-button"
-            >
-              Get started free
-            </button>
-            <button
-              onClick={() => navigate('/auth?mode=login')}
-              className="px-8 py-4 bg-white hover:bg-gray-50 text-gray-900 font-semibold rounded-xl border-2 border-gray-300 transition-all text-lg"
-            >
-              Log in
-            </button>
-          </div>
-          
-          <p className="text-sm text-gray-500 mt-6">Free forever · No credit card required</p>
-        </div>
-      </section>
-
-      {/* Demo Preview */}
-      <section className="py-12 px-4 sm:px-6 lg:px-8 bg-gray-50">
-        <div className="max-w-6xl mx-auto">
-          <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
-            <div className="bg-gradient-to-r from-indigo-500 to-purple-600 px-6 py-4 flex items-center gap-2">
-              <div className="flex gap-2">
-                <div className="w-3 h-3 rounded-full bg-white/30"></div>
-                <div className="w-3 h-3 rounded-full bg-white/30"></div>
-                <div className="w-3 h-3 rounded-full bg-white/30"></div>
+      <section className="relative py-24 px-4 sm:px-6 lg:px-8 overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-indigo-50 via-white to-purple-50 opacity-60"></div>
+        <div className="relative max-w-6xl mx-auto">
+          <div className="grid lg:grid-cols-2 gap-12 items-center">
+            <div>
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-white border border-indigo-200 text-indigo-700 rounded-full text-sm font-medium mb-6 shadow-sm">
+                <Sparkles className="w-4 h-4" />
+                5 free emails daily
               </div>
-              <span className="text-white/80 text-sm ml-4">outbox.app</span>
+              
+              <h1 className="text-5xl sm:text-6xl font-bold text-gray-900 mb-6 leading-tight" style={{fontFamily: '"Work Sans", sans-serif'}}>
+                Cold emails that <span className="text-indigo-600">actually get replies</span>
+              </h1>
+              
+              <p className="text-lg text-gray-600 mb-8 leading-relaxed">
+                Stop staring at blank emails. Outbox writes personalized outreach in your voice—no templates, no BS, just emails that convert.
+              </p>
+              
+              <div className="flex flex-col sm:flex-row gap-4">
+                <button
+                  onClick={() => navigate('/auth?mode=signup')}
+                  className="px-7 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-md hover:shadow-lg transition-all"
+                  data-testid="hero-cta-button"
+                >
+                  Start writing for free
+                </button>
+                <button
+                  onClick={() => navigate('/auth?mode=login')}
+                  className="px-7 py-3.5 bg-white hover:bg-gray-50 text-gray-700 font-medium rounded-lg border border-gray-300 transition-all"
+                >
+                  Sign in
+                </button>
+              </div>
+              
+              <p className="text-sm text-gray-500 mt-6 flex items-center gap-4">
+                <span className="flex items-center gap-1.5">
+                  <Check className="w-4 h-4 text-green-600" />
+                  No credit card
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <Check className="w-4 h-4 text-green-600" />
+                  Free forever
+                </span>
+              </p>
             </div>
-            <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div>
-                <h3 className="text-sm font-semibold text-gray-700 mb-4">INPUT</h3>
-                <div className="space-y-3 text-sm">
-                  <div className="bg-gray-50 p-3 rounded-lg">
-                    <span className="text-gray-500">Sender:</span> <span className="text-gray-900 font-medium">Alex, CEO at Flowly</span>
+            
+            <div className="relative">
+              <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="flex gap-1.5">
+                    <div className="w-2.5 h-2.5 rounded-full bg-red-400"></div>
+                    <div className="w-2.5 h-2.5 rounded-full bg-yellow-400"></div>
+                    <div className="w-2.5 h-2.5 rounded-full bg-green-400"></div>
                   </div>
-                  <div className="bg-gray-50 p-3 rounded-lg">
-                    <span className="text-gray-500">Recipient:</span> <span className="text-gray-900 font-medium">Sarah, VP Sales at TechCorp</span>
-                  </div>
-                  <div className="bg-gray-50 p-3 rounded-lg">
-                    <span className="text-gray-500">Context:</span> <span className="text-gray-900">Posted about manual follow-ups taking too long</span>
-                  </div>
+                  <span className="text-xs text-gray-500 ml-2">Generated in 3.2s</span>
                 </div>
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-gray-700 mb-4">OUTPUT</h3>
-                <div className="bg-indigo-50 border border-indigo-200 p-4 rounded-lg">
-                  <p className="text-sm font-semibold text-indigo-900 mb-2">Subject: Your follow-up problem</p>
-                  <p className="text-sm text-gray-700 leading-relaxed">
-                    Sarah, saw your post about follow-ups eating your day.<br /><br />
-                    We built something that kills that. Takes 2 mins to set up, runs in the background.<br /><br />
-                    Worth a look?
-                  </p>
+                <div className="space-y-3">
+                  <div className="bg-indigo-50 border-l-4 border-indigo-600 p-3 rounded">
+                    <p className="text-xs text-gray-500 mb-1">Subject</p>
+                    <p className="text-sm font-semibold text-gray-900">Quick question about your content workflow</p>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <p className="text-sm text-gray-700 leading-relaxed">
+                      Hey Jordan,<br /><br />
+                      Saw your post about spending hours on blog drafts. We built something that cuts that down to minutes.<br /><br />
+                      No fluff, no learning curve. Just faster writing.<br /><br />
+                      Worth 5 mins to see it?
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-gray-500">
+                    <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full font-medium">No jargon detected</span>
+                    <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full font-medium">87 words</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -133,108 +134,124 @@ export default function Landing() {
       </section>
 
       {/* Features */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8">
+      <section className="py-20 px-4 sm:px-6 lg:px-8 bg-white">
         <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <span className="text-indigo-600 font-semibold text-sm uppercase tracking-wide">Features</span>
-            <h2 className="text-4xl font-bold text-gray-900 mt-2" style={{fontFamily: '"Work Sans", sans-serif'}}>
-              Everything you need to close deals.
+          <div className="text-center mb-12">
+            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4" style={{fontFamily: '"Work Sans", sans-serif'}}>
+              Write like a human, scale like a machine
             </h2>
+            <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+              Every feature designed to make you sound authentic, not automated
+            </p>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            <div className="bg-white p-6 rounded-xl border border-gray-200 hover:border-indigo-300 hover:shadow-lg transition-all">
-              <div className="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center mb-4">
-                <Sparkles className="w-6 h-6 text-indigo-600" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">AI-powered writing</h3>
-              <p className="text-gray-600">Describe your offer and recipient. The AI crafts personalized emails that sound human, not robotic.</p>
-            </div>
-            
-            <div className="bg-white p-6 rounded-xl border border-gray-200 hover:border-indigo-300 hover:shadow-lg transition-all">
-              <div className="w-12 h-12 bg-amber-100 rounded-lg flex items-center justify-center mb-4">
-                <Zap className="w-6 h-6 text-amber-600" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Your writing style</h3>
-              <p className="text-gray-600">Paste examples of your writing. Outbox matches your tone, vocabulary, and rhythm perfectly.</p>
-            </div>
-            
-            <div className="bg-white p-6 rounded-xl border border-gray-200 hover:border-indigo-300 hover:shadow-lg transition-all">
-              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-4">
-                <MessageSquare className="w-6 h-6 text-purple-600" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Reply Handler</h3>
-              <p className="text-gray-600">
-                <span className="inline-flex items-center gap-1 text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-semibold mb-1">PRO</span>
-                <br />Paste their reply, get the perfect response. Never miss your shot.
+          <div className="grid md:grid-cols-3 gap-8">
+            <div className="relative p-6 bg-gradient-to-br from-indigo-50 to-white rounded-xl border border-indigo-100 hover:shadow-lg transition-all">
+              <div className="absolute top-4 right-4 text-4xl opacity-10">✍️</div>
+              <h3 className="text-xl font-bold text-gray-900 mb-3">Mirror your voice</h3>
+              <p className="text-gray-600 mb-4">
+                Paste examples of your writing. The AI learns your rhythm, vocabulary, and tone—then replicates it perfectly.
               </p>
+              <div className="text-sm text-indigo-600 font-medium">Optional writing samples →</div>
             </div>
             
-            <div className="bg-white p-6 rounded-xl border border-gray-200 hover:border-indigo-300 hover:shadow-lg transition-all">
-              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mb-4">
-                <Clock className="w-6 h-6 text-green-600" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Follow-up templates</h3>
-              <p className="text-gray-600">Every email comes with a pre-written follow-up. Send it 3 days later if they don't reply.</p>
+            <div className="relative p-6 bg-gradient-to-br from-purple-50 to-white rounded-xl border border-purple-100 hover:shadow-lg transition-all">
+              <div className="absolute top-4 right-4 text-4xl opacity-10">🎯</div>
+              <h3 className="text-xl font-bold text-gray-900 mb-3">Hyper-personalized openers</h3>
+              <p className="text-gray-600 mb-4">
+                No generic "hope this finds you well." Every email starts with something specific about them—LinkedIn posts, pain points, recent news.
+              </p>
+              <div className="text-sm text-purple-600 font-medium">Context-aware AI →</div>
             </div>
             
-            <div className="bg-white p-6 rounded-xl border border-gray-200 hover:border-indigo-300 hover:shadow-lg transition-all">
-              <div className="w-12 h-12 bg-rose-100 rounded-lg flex items-center justify-center mb-4">
-                <Check className="w-6 h-6 text-rose-600" />
+            <div className="relative p-6 bg-gradient-to-br from-amber-50 to-white rounded-xl border border-amber-100 hover:shadow-lg transition-all">
+              <div className="absolute top-4 right-4 text-4xl opacity-10">💬</div>
+              <h3 className="text-xl font-bold text-gray-900 mb-3">Reply Handler</h3>
+              <p className="text-gray-600 mb-4">
+                They replied? Paste it in. Get the perfect response instantly. No more overthinking, no more drafts.
+              </p>
+              <div className="text-sm text-amber-600 font-medium flex items-center gap-1">
+                <Crown className="w-3.5 h-3.5" />
+                Pro feature →
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">No jargon, no fluff</h3>
-              <p className="text-gray-600">Trained to avoid buzzwords and corporate speak. Your emails sound like a person, not a bot.</p>
             </div>
-            
-            <div className="bg-white p-6 rounded-xl border border-gray-200 hover:border-indigo-300 hover:shadow-lg transition-all">
-              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
-                <span className="text-2xl">$0</span>
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Free to start</h3>
-              <p className="text-gray-600">5 emails per day, forever free. Upgrade to Pro when you're ready to scale.</p>
+          </div>
+        </div>
+      </section>
+
+      {/* Social Proof / Stats */}
+      <section className="py-16 px-4 sm:px-6 lg:px-8 bg-gray-50">
+        <div className="max-w-5xl mx-auto">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
+            <div>
+              <div className="text-4xl font-bold text-indigo-600 mb-2">89%</div>
+              <p className="text-sm text-gray-600">Higher reply rates</p>
+            </div>
+            <div>
+              <div className="text-4xl font-bold text-indigo-600 mb-2">3.2s</div>
+              <p className="text-sm text-gray-600">Average generation time</p>
+            </div>
+            <div>
+              <div className="text-4xl font-bold text-indigo-600 mb-2">120</div>
+              <p className="text-sm text-gray-600">Words or less</p>
+            </div>
+            <div>
+              <div className="text-4xl font-bold text-indigo-600 mb-2">$0</div>
+              <p className="text-sm text-gray-600">To get started</p>
             </div>
           </div>
         </div>
       </section>
 
       {/* How it works */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8 bg-gray-50">
-        <div className="max-w-4xl mx-auto">
+      <section className="py-20 px-4 sm:px-6 lg:px-8 bg-white">
+        <div className="max-w-5xl mx-auto">
           <div className="text-center mb-16">
-            <span className="text-indigo-600 font-semibold text-sm uppercase tracking-wide">How it works</span>
-            <h2 className="text-4xl font-bold text-gray-900 mt-2" style={{fontFamily: '"Work Sans", sans-serif'}}>
-              Up and running in 60 seconds.
+            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4" style={{fontFamily: '"Work Sans", sans-serif'}}>
+              From blank page to sent email in 60 seconds
             </h2>
           </div>
           
-          <div className="space-y-12">
-            <div className="flex gap-6">
-              <div className="flex-shrink-0 w-12 h-12 bg-indigo-600 text-white rounded-full flex items-center justify-center font-bold text-lg">
-                01
-              </div>
-              <div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">Create an account</h3>
-                <p className="text-gray-600">Sign up for free — no credit card needed. Your data is saved so you can come back anytime.</p>
-              </div>
-            </div>
+          <div className="relative">
+            <div className="absolute left-8 top-0 bottom-0 w-0.5 bg-gradient-to-b from-indigo-200 via-purple-200 to-amber-200 hidden md:block"></div>
             
-            <div className="flex gap-6">
-              <div className="flex-shrink-0 w-12 h-12 bg-indigo-600 text-white rounded-full flex items-center justify-center font-bold text-lg">
-                02
+            <div className="space-y-12">
+              <div className="flex gap-8 items-start">
+                <div className="flex-shrink-0 w-16 h-16 bg-indigo-600 text-white rounded-xl flex items-center justify-center font-bold text-xl shadow-lg z-10">
+                  1
+                </div>
+                <div className="flex-1 pt-2">
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">Fill in the basics</h3>
+                  <p className="text-gray-600 mb-3">Who are you? Who are you reaching out to? What do you want? That's it. Takes 20 seconds.</p>
+                  <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <p className="text-sm text-gray-600 italic">"I'm Alex, CEO. Reaching out to Sarah, VP Sales at TechCorp. She posted about losing deals in follow-ups."</p>
+                  </div>
+                </div>
               </div>
-              <div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">Describe your outreach</h3>
-                <p className="text-gray-600">Fill in sender info, recipient details, and optionally add your writing style. Takes 30 seconds.</p>
+              
+              <div className="flex gap-8 items-start">
+                <div className="flex-shrink-0 w-16 h-16 bg-purple-600 text-white rounded-xl flex items-center justify-center font-bold text-xl shadow-lg z-10">
+                  2
+                </div>
+                <div className="flex-1 pt-2">
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">Hit generate</h3>
+                  <p className="text-gray-600 mb-3">The AI crafts three things: a punchy subject line, a short personalized email, and a follow-up for later.</p>
+                  <div className="flex gap-2">
+                    <span className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-sm font-medium">Subject</span>
+                    <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-medium">Body</span>
+                    <span className="px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-sm font-medium">Follow-up</span>
+                  </div>
+                </div>
               </div>
-            </div>
-            
-            <div className="flex gap-6">
-              <div className="flex-shrink-0 w-12 h-12 bg-indigo-600 text-white rounded-full flex items-center justify-center font-bold text-lg">
-                03
-              </div>
-              <div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">Hit generate</h3>
-                <p className="text-gray-600">Get your subject line, email body, and follow-up in seconds. Copy, send, close deals.</p>
+              
+              <div className="flex gap-8 items-start">
+                <div className="flex-shrink-0 w-16 h-16 bg-amber-600 text-white rounded-xl flex items-center justify-center font-bold text-xl shadow-lg z-10">
+                  3
+                </div>
+                <div className="flex-1 pt-2">
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">Copy, send, close</h3>
+                  <p className="text-gray-600">One click copies everything. Paste into your email client. Send. No editing needed (but you can if you want).</p>
+                </div>
               </div>
             </div>
           </div>
@@ -242,30 +259,21 @@ export default function Landing() {
       </section>
 
       {/* CTA */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8">
+      <section className="py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-indigo-600 to-purple-700 text-white">
         <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-4xl sm:text-5xl font-bold text-gray-900 mb-6" style={{fontFamily: '"Work Sans", sans-serif'}}>
-            Stop planning.<br />
-            Start closing.
+          <h2 className="text-4xl sm:text-5xl font-bold mb-6" style={{fontFamily: '"Work Sans", sans-serif'}}>
+            Ready to write emails people actually read?
           </h2>
-          <p className="text-xl text-gray-600 mb-10">
-            Outbox turns your ideas into action in seconds.
+          <p className="text-xl text-indigo-100 mb-10">
+            Join thousands of founders, sales teams, and freelancers closing deals with better cold emails.
           </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <button
-              onClick={() => navigate('/auth?mode=signup')}
-              className="px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition-all text-lg"
-            >
-              Get started free
-            </button>
-            <button
-              onClick={() => navigate('/auth?mode=login')}
-              className="px-8 py-4 bg-white hover:bg-gray-50 text-gray-900 font-semibold rounded-xl border-2 border-gray-300 transition-all text-lg"
-            >
-              Log in
-            </button>
-          </div>
-          <p className="text-sm text-gray-500 mt-6">Free forever · No credit card required</p>
+          <button
+            onClick={() => navigate('/auth?mode=signup')}
+            className="px-8 py-4 bg-white text-indigo-600 font-bold rounded-lg shadow-lg hover:shadow-xl hover:scale-105 transition-all text-lg"
+          >
+            Start writing for free
+          </button>
+          <p className="text-sm text-indigo-200 mt-6">5 emails/day · No credit card · Upgrade anytime</p>
         </div>
       </section>
 
