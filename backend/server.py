@@ -64,8 +64,8 @@ class User(BaseModel):
     id: str
     email: str
     name: str
-    subscription_tier: str
-    subscription_status: Optional[str] = None
+    subscription_tier: str = "free"
+    subscription_status: Optional[str] = "active"
     created_at: str
 
 # Email Models

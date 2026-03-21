@@ -34,11 +34,19 @@
   background: #64748b;
 }
 
-/* Smooth transitions */
-input:focus,
-textarea:focus,
-button:focus {
-  outline: none;
+/* Better text rendering */
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Focus visible for accessibility */
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
 }
 
 /* Animation for cards */
@@ -55,21 +63,46 @@ button:focus {
 
 [data-testid="subject-card"],
 [data-testid="body-card"],
-[data-testid="followup-card"] {
+[data-testid="followup-card"],
+[data-testid="reply-response-card"] {
   animation: fadeIn 0.3s ease-out;
 }
 
-/* Better text rendering */
-body {
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
+/* Loading spinner */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
-/* Focus visible for accessibility */
-button:focus-visible,
-input:focus-visible,
-textarea:focus-visible {
-  outline: 2px solid #14b8a6;
-  outline-offset: 2px;
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* Success checkmark animation */
+@keyframes checkmark {
+  0% {
+    transform: scale(0);
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.animate-checkmark {
+  animation: checkmark 0.3s ease-out;
+}
+
+/* Usage bar animation */
+@keyframes fillBar {
+  from {
+    width: 0;
+  }
+}
+
+.usage-bar {
+  animation: fillBar 0.5s ease-out;
 }
