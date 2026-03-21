@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, status
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -7,10 +7,11 @@ import os
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
-from typing import List, Optional
+from typing import List, Optional, Dict
 import uuid
 from datetime import datetime, timezone, timedelta
 from emergentintegrations.llm.chat import LlmChat, UserMessage
+from emergentintegrations.payments.stripe.checkout import StripeCheckout, CheckoutSessionResponse, CheckoutStatusResponse, CheckoutSessionRequest
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 
@@ -30,12 +31,18 @@ SECRET_KEY = os.environ.get('JWT_SECRET_KEY', 'default-secret-key')
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_DAYS = 30
 
-# Create the main app without a prefix
-app = FastAPI()
+# Stripe
+stripe_api_key = os.environ.get('STRIPE_API_KEY')
 
-# Create a router with the /api prefix
+# Create the main app
+app = FastAPI()
 api_router = APIRouter(prefix="/api")
 
+# Subscription tiers
+SUBSCRIPTION_LIMITS = {
+    "free": {"daily_emails": 5, "writing_samples": 3, "reply_handler": False},
+    "pro": {"daily_emails": 999999, "writing_samples": 999999, "reply_handler": True}
+}
 
 # Auth Models
 class UserRegister(BaseModel):
@@ -57,9 +64,11 @@ class User(BaseModel):
     id: str
     email: str
     name: str
+    subscription_tier: str
+    subscription_status: Optional[str] = None
     created_at: str
 
-# Email Generation Models
+# Email Models
 class EmailGenerationRequest(BaseModel):
     sender_name: str
     sender_role: str
@@ -75,6 +84,26 @@ class EmailGenerationResponse(BaseModel):
     email_body: str
     follow_up: str
 
+class ReplyHandlerRequest(BaseModel):
+    original_email: str
+    recipient_reply: str
+    context: Optional[str] = None
+
+class ReplyHandlerResponse(BaseModel):
+    suggested_response: str
+
+class UsageStats(BaseModel):
+    daily_emails_used: int
+    daily_emails_limit: int
+    writing_samples_used: int
+    writing_samples_limit: int
+    reply_handler_access: bool
+    subscription_tier: str
+
+class CheckoutRequest(BaseModel):
+    plan: str
+    billing: str
+    origin_url: str
 
 # Auth Helper Functions
 def verify_password(plain_password, hashed_password):
@@ -87,14 +116,12 @@ def create_access_token(data: dict):
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
+        detail="Could not validate credentials"
     )
     try:
         token = credentials.credentials
@@ -110,16 +137,43 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         raise credentials_exception
     return User(**user)
 
+async def check_usage_limit(user_id: str, limit_type: str):
+    today = datetime.now(timezone.utc).date().isoformat()
+    usage = await db.usage.find_one({"user_id": user_id, "date": today}, {"_id": 0})
+    
+    user = await db.users.find_one({"id": user_id}, {"_id": 0})
+    tier = user.get("subscription_tier", "free")
+    limits = SUBSCRIPTION_LIMITS[tier]
+    
+    if not usage:
+        usage = {"user_id": user_id, "date": today, "emails_generated": 0, "samples_used": 0}
+        await db.usage.insert_one(usage)
+    
+    if limit_type == "email":
+        if usage.get("emails_generated", 0) >= limits["daily_emails"]:
+            return False
+    elif limit_type == "sample":
+        if usage.get("samples_used", 0) >= limits["writing_samples"]:
+            return False
+    
+    return True
+
+async def increment_usage(user_id: str, limit_type: str):
+    today = datetime.now(timezone.utc).date().isoformat()
+    field = "emails_generated" if limit_type == "email" else "samples_used"
+    await db.usage.update_one(
+        {"user_id": user_id, "date": today},
+        {"$inc": {field: 1}},
+        upsert=True
+    )
 
 # Auth Routes
 @api_router.post("/auth/register", response_model=Token)
 async def register(user_data: UserRegister):
-    # Check if user exists
     existing_user = await db.users.find_one({"email": user_data.email}, {"_id": 0})
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
     
-    # Create new user
     user_id = str(uuid.uuid4())
     hashed_password = get_password_hash(user_data.password)
     
@@ -128,12 +182,12 @@ async def register(user_data: UserRegister):
         "email": user_data.email,
         "name": user_data.name,
         "hashed_password": hashed_password,
+        "subscription_tier": "free",
+        "subscription_status": "active",
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     
     await db.users.insert_one(user_doc)
-    
-    # Create token
     access_token = create_access_token(data={"sub": user_id})
     
     return Token(
@@ -142,7 +196,8 @@ async def register(user_data: UserRegister):
         user={
             "id": user_id,
             "email": user_data.email,
-            "name": user_data.name
+            "name": user_data.name,
+            "subscription_tier": "free"
         }
     )
 
@@ -151,10 +206,7 @@ async def login(credentials: UserLogin):
     user = await db.users.find_one({"email": credentials.email}, {"_id": 0})
     
     if not user or not verify_password(credentials.password, user["hashed_password"]):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password")
     
     access_token = create_access_token(data={"sub": user["id"]})
     
@@ -164,7 +216,8 @@ async def login(credentials: UserLogin):
         user={
             "id": user["id"],
             "email": user["email"],
-            "name": user["name"]
+            "name": user["name"],
+            "subscription_tier": user.get("subscription_tier", "free")
         }
     )
 
@@ -172,16 +225,39 @@ async def login(credentials: UserLogin):
 async def get_me(current_user: User = Depends(get_current_user)):
     return current_user
 
+@api_router.get("/usage", response_model=UsageStats)
+async def get_usage(current_user: User = Depends(get_current_user)):
+    today = datetime.now(timezone.utc).date().isoformat()
+    usage = await db.usage.find_one({"user_id": current_user.id, "date": today}, {"_id": 0})
+    
+    tier = current_user.subscription_tier
+    limits = SUBSCRIPTION_LIMITS.get(tier, SUBSCRIPTION_LIMITS["free"])
+    
+    return UsageStats(
+        daily_emails_used=usage.get("emails_generated", 0) if usage else 0,
+        daily_emails_limit=limits["daily_emails"],
+        writing_samples_used=usage.get("samples_used", 0) if usage else 0,
+        writing_samples_limit=limits["writing_samples"],
+        reply_handler_access=limits["reply_handler"],
+        subscription_tier=tier
+    )
 
-# Email Generation Route (Protected)
+# Email Generation
 @api_router.post("/generate-email", response_model=EmailGenerationResponse)
 async def generate_email(request: EmailGenerationRequest, current_user: User = Depends(get_current_user)):
     try:
+        # Check usage limit
+        if not await check_usage_limit(current_user.id, "email"):
+            raise HTTPException(status_code=429, detail="Daily email limit reached. Upgrade to Pro for unlimited access.")
+        
+        if request.writing_sample:
+            if not await check_usage_limit(current_user.id, "sample"):
+                raise HTTPException(status_code=429, detail="Writing sample limit reached. Upgrade to Pro for unlimited access.")
+        
         api_key = os.environ.get('EMERGENT_LLM_KEY')
         if not api_key:
             raise HTTPException(status_code=500, detail="API key not configured")
         
-        # Improved writing style handling
         if not request.writing_style and not request.writing_sample:
             default_style = "conversational and authentic, like a real person reaching out"
         else:
@@ -239,7 +315,6 @@ Remember: No em dashes. No jargon. Sound human."""
         
         response_text = response.strip()
         
-        # Parse response
         subject_line = ""
         email_body = ""
         follow_up = ""
@@ -278,6 +353,11 @@ Remember: No em dashes. No jargon. Sound human."""
         if not subject_line or not email_body or not follow_up:
             raise HTTPException(status_code=500, detail="Failed to parse email generation response")
         
+        # Increment usage
+        await increment_usage(current_user.id, "email")
+        if request.writing_sample:
+            await increment_usage(current_user.id, "sample")
+        
         # Save to history
         history_doc = {
             "id": str(uuid.uuid4()),
@@ -299,10 +379,176 @@ Remember: No em dashes. No jargon. Sound human."""
     
     except Exception as e:
         logger.error(f"Error generating email: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to generate email: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
+# Reply Handler (Pro only)
+@api_router.post("/reply-handler", response_model=ReplyHandlerResponse)
+async def handle_reply(request: ReplyHandlerRequest, current_user: User = Depends(get_current_user)):
+    try:
+        # Check Pro access
+        if current_user.subscription_tier != "pro":
+            raise HTTPException(status_code=403, detail="Reply Handler is a Pro feature. Upgrade to access.")
+        
+        api_key = os.environ.get('EMERGENT_LLM_KEY')
+        if not api_key:
+            raise HTTPException(status_code=500, detail="API key not configured")
+        
+        system_message = """You are an expert email response writer. Generate professional, thoughtful responses to emails.
 
-# Include the router in the main app
+RULES:
+1. Match the tone of the original conversation
+2. Be concise and direct
+3. Address all points raised in the reply
+4. No jargon or buzzwords
+5. Sound human and authentic
+6. Keep under 150 words
+7. No em dashes
+
+Return only the suggested response text, no preamble."""
+
+        context_text = f"\n\nAdditional context: {request.context}" if request.context else ""
+        
+        user_prompt = f"""Original email I sent:
+{request.original_email}
+
+Their reply:
+{request.recipient_reply}{context_text}
+
+Generate a perfect response."""
+
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=str(uuid.uuid4()),
+            system_message=system_message
+        ).with_model("gemini", "gemini-3-flash-preview")
+
+        user_message = UserMessage(text=user_prompt)
+        response = await chat.send_message(user_message)
+        
+        return ReplyHandlerResponse(suggested_response=response.strip())
+    
+    except Exception as e:
+        logger.error(f"Error handling reply: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Stripe Checkout
+@api_router.post("/checkout/session")
+async def create_checkout_session(checkout_req: CheckoutRequest, current_user: User = Depends(get_current_user)):
+    try:
+        # Define pricing
+        PRICES = {
+            "pro_monthly": 7.00,
+            "pro_annual": 60.00  # $5/month * 12
+        }
+        
+        if checkout_req.plan != "pro":
+            raise HTTPException(status_code=400, detail="Invalid plan")
+        
+        price_key = f"pro_{checkout_req.billing}"
+        if price_key not in PRICES:
+            raise HTTPException(status_code=400, detail="Invalid billing cycle")
+        
+        amount = PRICES[price_key]
+        
+        # Create webhook and checkout
+        webhook_url = f"{checkout_req.origin_url}/api/webhook/stripe"
+        stripe_checkout = StripeCheckout(api_key=stripe_api_key, webhook_url=webhook_url)
+        
+        success_url = f"{checkout_req.origin_url}/success?session_id={{{{CHECKOUT_SESSION_ID}}}}"
+        cancel_url = f"{checkout_req.origin_url}/pricing"
+        
+        checkout_request = CheckoutSessionRequest(
+            amount=amount,
+            currency="usd",
+            success_url=success_url,
+            cancel_url=cancel_url,
+            metadata={
+                "user_id": current_user.id,
+                "plan": checkout_req.plan,
+                "billing": checkout_req.billing
+            }
+        )
+        
+        session = await stripe_checkout.create_checkout_session(checkout_request)
+        
+        # Create transaction record
+        transaction_doc = {
+            "id": str(uuid.uuid4()),
+            "session_id": session.session_id,
+            "user_id": current_user.id,
+            "amount": amount,
+            "currency": "usd",
+            "plan": checkout_req.plan,
+            "billing": checkout_req.billing,
+            "payment_status": "pending",
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.payment_transactions.insert_one(transaction_doc)
+        
+        return {"url": session.url, "session_id": session.session_id}
+    
+    except Exception as e:
+        logger.error(f"Checkout error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/checkout/status/{session_id}")
+async def get_checkout_status(session_id: str, current_user: User = Depends(get_current_user)):
+    try:
+        webhook_url = "placeholder"
+        stripe_checkout = StripeCheckout(api_key=stripe_api_key, webhook_url=webhook_url)
+        
+        status = await stripe_checkout.get_checkout_status(session_id)
+        
+        # Update transaction if paid
+        if status.payment_status == "paid":
+            transaction = await db.payment_transactions.find_one({"session_id": session_id}, {"_id": 0})
+            
+            if transaction and transaction.get("payment_status") != "paid":
+                # Update transaction
+                await db.payment_transactions.update_one(
+                    {"session_id": session_id},
+                    {"$set": {"payment_status": "paid", "updated_at": datetime.now(timezone.utc).isoformat()}}
+                )
+                
+                # Upgrade user to Pro
+                await db.users.update_one(
+                    {"id": transaction["user_id"]},
+                    {"$set": {"subscription_tier": "pro", "subscription_status": "active"}}
+                )
+        
+        return status
+    
+    except Exception as e:
+        logger.error(f"Status check error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/webhook/stripe")
+async def stripe_webhook(request: Request):
+    try:
+        body = await request.body()
+        signature = request.headers.get("Stripe-Signature")
+        
+        webhook_url = "placeholder"
+        stripe_checkout = StripeCheckout(api_key=stripe_api_key, webhook_url=webhook_url)
+        
+        webhook_response = await stripe_checkout.handle_webhook(body, signature)
+        
+        if webhook_response.payment_status == "paid":
+            metadata = webhook_response.metadata
+            user_id = metadata.get("user_id")
+            
+            if user_id:
+                await db.users.update_one(
+                    {"id": user_id},
+                    {"$set": {"subscription_tier": "pro", "subscription_status": "active"}}
+                )
+        
+        return {"status": "success"}
+    
+    except Exception as e:
+        logger.error(f"Webhook error: {str(e)}")
+        return {"status": "error", "message": str(e)}
+
 app.include_router(api_router)
 
 app.add_middleware(
@@ -313,7 +559,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
