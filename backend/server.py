@@ -454,7 +454,8 @@ async def create_checkout_session(checkout_req: CheckoutRequest, current_user: U
         webhook_url = f"{checkout_req.origin_url}/api/webhook/stripe"
         stripe_checkout = StripeCheckout(api_key=stripe_api_key, webhook_url=webhook_url)
         
-        success_url = f"{checkout_req.origin_url}/success?session_id=CHECKOUT_SESSION_ID"
+        # Don't use session_id placeholder - handle via webhook and metadata
+        success_url = f"{checkout_req.origin_url}/success?upgrade=true"
         cancel_url = f"{checkout_req.origin_url}/pricing"
         
         checkout_request = CheckoutSessionRequest(

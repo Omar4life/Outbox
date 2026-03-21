@@ -830,86 +830,38 @@ function Dashboard() {
 
 function SuccessPage() {
   const navigate = useNavigate();
-  const location = useLocation();
-  const [status, setStatus] = useState('checking');
-  const [attempts, setAttempts] = useState(0);
+  const [status, setStatus] = useState('success');
 
   useEffect(() => {
-    const searchParams = new URLSearchParams(location.search);
-    const sessionId = searchParams.get('session_id');
-    
-    if (sessionId) {
-      pollPaymentStatus(sessionId);
-    } else {
-      setStatus('error');
-    }
-  }, [location]);
-
-  const pollPaymentStatus = async (sessionId) => {
-    const maxAttempts = 5;
-    
-    if (attempts >= maxAttempts) {
-      setStatus('timeout');
-      return;
-    }
-
-    try {
+    // Upgrade happened via webhook, just show success and redirect
+    const timer = setTimeout(() => {
+      // Refresh user data
       const token = localStorage.getItem('token');
-      const response = await axios.get(`${API}/checkout/status/${sessionId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      if (response.data.payment_status === 'paid') {
-        setStatus('success');
-        setTimeout(() => navigate('/dashboard'), 3000);
+      if (token) {
+        axios.get(`${API}/auth/me`, {
+          headers: { Authorization: `Bearer ${token}` }
+        }).then(response => {
+          localStorage.setItem('user', JSON.stringify(response.data));
+          navigate('/dashboard');
+        }).catch(() => {
+          navigate('/dashboard');
+        });
       } else {
-        setAttempts(prev => prev + 1);
-        setTimeout(() => pollPaymentStatus(sessionId), 2000);
+        navigate('/dashboard');
       }
-    } catch (error) {
-      console.error('Status check failed:', error);
-      setStatus('error');
-    }
-  };
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, [navigate]);
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
       <div className="max-w-md w-full bg-white rounded-2xl shadow-xl border border-gray-200 p-8 text-center">
-        {status === 'checking' && (
-          <>
-            <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <RefreshCw className="w-8 h-8 text-indigo-600 animate-spin" />
-            </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Processing Payment</h2>
-            <p className="text-gray-600">Please wait while we confirm your payment...</p>
-          </>
-        )}
-        
-        {status === 'success' && (
-          <>
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Check className="w-8 h-8 text-green-600" />
-            </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Welcome to Pro!</h2>
-            <p className="text-gray-600 mb-4">Your subscription is now active. Redirecting...</p>
-          </>
-        )}
-        
-        {status === 'error' && (
-          <>
-            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <X className="w-8 h-8 text-red-600" />
-            </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Payment Failed</h2>
-            <p className="text-gray-600 mb-4">Something went wrong. Please try again.</p>
-            <button
-              onClick={() => navigate('/pricing')}
-              className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-all"
-            >
-              Back to Pricing
-            </button>
-          </>
-        )}
+        <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <Check className="w-8 h-8 text-green-600" />
+        </div>
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">Payment Successful!</h2>
+        <p className="text-gray-600 mb-4">Welcome to Pro. Redirecting to dashboard...</p>
       </div>
     </div>
   );
