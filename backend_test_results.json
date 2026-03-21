@@ -3,50 +3,60 @@
     "total_tests": 7,
     "passed_tests": 7,
     "success_rate": "100.0%",
-    "timestamp": "2026-03-21T20:26:48.068784"
+    "timestamp": "2026-03-21T20:43:56.981646",
+    "iteration": 2,
+    "features_tested": [
+      "User registration",
+      "User login",
+      "JWT authentication",
+      "Protected routes",
+      "Email generation with auth",
+      "Email quality (no em dashes, no jargon)",
+      "Default writing style"
+    ]
   },
   "detailed_results": [
     {
-      "test_name": "Root endpoint",
+      "test_name": "User registration",
       "success": true,
-      "details": "Status: 200, Response: {'message': 'Hello World'}",
-      "timestamp": "2026-03-21T20:26:41.262177"
+      "details": "Registration successful. User ID: 9d90eacf-951c-4230-8d50-b2c5c95535d1",
+      "timestamp": "2026-03-21T20:43:50.939038"
     },
     {
-      "test_name": "POST /status",
+      "test_name": "User login",
       "success": true,
-      "details": "POST Status: 200, ID: c906510c-2568-447f-b211-59c5e7ed8425",
-      "timestamp": "2026-03-21T20:26:41.467122"
+      "details": "Login successful. User: Test User",
+      "timestamp": "2026-03-21T20:43:51.298248"
     },
     {
-      "test_name": "GET /status",
+      "test_name": "Invalid login rejection",
       "success": true,
-      "details": "GET Status: 200, Records: 1",
-      "timestamp": "2026-03-21T20:26:41.635453"
+      "details": "Status: 401 (expected 401 for invalid credentials)",
+      "timestamp": "2026-03-21T20:43:51.415773"
     },
     {
-      "test_name": "API key functionality",
+      "test_name": "Get current user",
       "success": true,
-      "details": "API key working correctly",
-      "timestamp": "2026-03-21T20:26:43.580949"
+      "details": "User data retrieved. Email: test_user_e41a980a@example.com",
+      "timestamp": "2026-03-21T20:43:51.517841"
     },
     {
-      "test_name": "Email generation (valid request)",
+      "test_name": "Protected route without auth",
       "success": true,
-      "details": "Generated successfully. Body words: 103, Subject: 'Thinking about your recent lead qualification post...'",
-      "timestamp": "2026-03-21T20:26:45.782090"
+      "details": "Status: 403 (expected 401/403 for missing auth)",
+      "timestamp": "2026-03-21T20:43:51.629293"
     },
     {
-      "test_name": "Email generation (with sample)",
+      "test_name": "Email generation (with auth)",
       "success": true,
-      "details": "Generated with sample. Subject: 'Making StartupXYZ\u2019s marketing ...'",
-      "timestamp": "2026-03-21T20:26:47.890894"
+      "details": "Generated successfully. Body words: 92, Quality: Good",
+      "timestamp": "2026-03-21T20:43:53.463921"
     },
     {
-      "test_name": "Email generation (missing fields)",
+      "test_name": "Email generation (no style)",
       "success": true,
-      "details": "Status: 422 (expected 422 for missing field)",
-      "timestamp": "2026-03-21T20:26:48.067914"
+      "details": "Generated without style. Natural tone: Yes",
+      "timestamp": "2026-03-21T20:43:56.980770"
     }
   ]
 }

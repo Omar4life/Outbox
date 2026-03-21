@@ -1,15 +1,18 @@
-from fastapi import FastAPI, APIRouter, HTTPException
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
 from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from emergentintegrations.llm.chat import LlmChat, UserMessage
+from passlib.context import CryptContext
+from jose import JWTError, jwt
 
 
 ROOT_DIR = Path(__file__).parent
@@ -20,6 +23,13 @@ mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
+# Security
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+security = HTTPBearer()
+SECRET_KEY = os.environ.get('JWT_SECRET_KEY', 'default-secret-key')
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_DAYS = 30
+
 # Create the main app without a prefix
 app = FastAPI()
 
@@ -27,16 +37,27 @@ app = FastAPI()
 api_router = APIRouter(prefix="/api")
 
 
-# Define Models
-class StatusCheck(BaseModel):
-    model_config = ConfigDict(extra="ignore")  # Ignore MongoDB's _id field
-    
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    client_name: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+# Auth Models
+class UserRegister(BaseModel):
+    email: EmailStr
+    password: str
+    name: str
 
-class StatusCheckCreate(BaseModel):
-    client_name: str
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+    user: dict
+
+class User(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    email: str
+    name: str
+    created_at: str
 
 # Email Generation Models
 class EmailGenerationRequest(BaseModel):
@@ -46,7 +67,7 @@ class EmailGenerationRequest(BaseModel):
     recipient_name: str
     recipient_role_company: str
     recipient_context: str
-    writing_style: str
+    writing_style: Optional[str] = None
     writing_sample: Optional[str] = None
 
 class EmailGenerationResponse(BaseModel):
@@ -54,60 +75,135 @@ class EmailGenerationResponse(BaseModel):
     email_body: str
     follow_up: str
 
-# Add your routes to the router instead of directly to app
-@api_router.get("/")
-async def root():
-    return {"message": "Hello World"}
 
-@api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.model_dump()
-    status_obj = StatusCheck(**status_dict)
-    
-    # Convert to dict and serialize datetime to ISO string for MongoDB
-    doc = status_obj.model_dump()
-    doc['timestamp'] = doc['timestamp'].isoformat()
-    
-    _ = await db.status_checks.insert_one(doc)
-    return status_obj
+# Auth Helper Functions
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
 
-@api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks():
-    # Exclude MongoDB's _id field from the query results
-    status_checks = await db.status_checks.find({}, {"_id": 0}).to_list(1000)
-    
-    # Convert ISO string timestamps back to datetime objects
-    for check in status_checks:
-        if isinstance(check['timestamp'], str):
-            check['timestamp'] = datetime.fromisoformat(check['timestamp'])
-    
-    return status_checks
+def get_password_hash(password):
+    return pwd_context.hash(password)
 
-@api_router.post("/generate-email", response_model=EmailGenerationResponse)
-async def generate_email(request: EmailGenerationRequest):
+def create_access_token(data: dict):
+    to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
     try:
-        # Get API key from environment
+        token = credentials.credentials
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+    
+    user = await db.users.find_one({"id": user_id}, {"_id": 0})
+    if user is None:
+        raise credentials_exception
+    return User(**user)
+
+
+# Auth Routes
+@api_router.post("/auth/register", response_model=Token)
+async def register(user_data: UserRegister):
+    # Check if user exists
+    existing_user = await db.users.find_one({"email": user_data.email}, {"_id": 0})
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    # Create new user
+    user_id = str(uuid.uuid4())
+    hashed_password = get_password_hash(user_data.password)
+    
+    user_doc = {
+        "id": user_id,
+        "email": user_data.email,
+        "name": user_data.name,
+        "hashed_password": hashed_password,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.users.insert_one(user_doc)
+    
+    # Create token
+    access_token = create_access_token(data={"sub": user_id})
+    
+    return Token(
+        access_token=access_token,
+        token_type="bearer",
+        user={
+            "id": user_id,
+            "email": user_data.email,
+            "name": user_data.name
+        }
+    )
+
+@api_router.post("/auth/login", response_model=Token)
+async def login(credentials: UserLogin):
+    user = await db.users.find_one({"email": credentials.email}, {"_id": 0})
+    
+    if not user or not verify_password(credentials.password, user["hashed_password"]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password"
+        )
+    
+    access_token = create_access_token(data={"sub": user["id"]})
+    
+    return Token(
+        access_token=access_token,
+        token_type="bearer",
+        user={
+            "id": user["id"],
+            "email": user["email"],
+            "name": user["name"]
+        }
+    )
+
+@api_router.get("/auth/me", response_model=User)
+async def get_me(current_user: User = Depends(get_current_user)):
+    return current_user
+
+
+# Email Generation Route (Protected)
+@api_router.post("/generate-email", response_model=EmailGenerationResponse)
+async def generate_email(request: EmailGenerationRequest, current_user: User = Depends(get_current_user)):
+    try:
         api_key = os.environ.get('EMERGENT_LLM_KEY')
         if not api_key:
             raise HTTPException(status_code=500, detail="API key not configured")
         
-        # Build the prompt
-        writing_sample_text = f"\n\nWriting Sample (mimic this tone and style):\n{request.writing_sample}" if request.writing_sample else ""
+        # Improved writing style handling
+        if not request.writing_style and not request.writing_sample:
+            default_style = "conversational and authentic, like a real person reaching out"
+        else:
+            default_style = request.writing_style or "conversational and professional"
         
-        system_message = """You are a cold email expert. Generate hyper-personalized cold emails that:
-- Are under 120 words total
-- Have a hyper-personalized opener
-- Lead with the recipient's pain point
-- Include one soft CTA
-- Avoid buzzwords and corporate jargon
-- Match the specified tone and writing style exactly
+        writing_sample_text = f"\n\nWriting Sample (match this exact tone, vocabulary, and sentence structure):\n{request.writing_sample}" if request.writing_sample else ""
+        
+        system_message = """You are an expert cold email writer. Your emails sound human and authentic, never corporate or sales-y.
 
-Generate exactly three items:
-1. Subject Line (5-8 words max, intriguing but professional)
-2. Email Body (under 120 words, personalized opener, address pain, soft CTA)
-3. Follow-up (under 100 words, reference previous email, add value)
+CRITICAL RULES:
+1. NEVER use em dashes (—). Use regular dashes (-) or commas instead.
+2. AVOID corporate jargon: hectic, bandwidth, synergy, leverage, touch base, circle back, deep dive, low-hanging fruit, game-changer, disruptive
+3. Write like a real person texting a colleague, not a marketing team
+4. Keep it under 120 words total
+5. Start with something specific about them (not generic praise)
+6. Lead with their pain point, not your product
+7. One simple question as CTA, not "let's schedule a call"
+8. Use simple words. If a 12-year-old wouldn't understand it, don't use it.
+9. Short sentences. Vary length. Breathe.
+10. If writing style is provided, match it EXACTLY - same vocabulary level, sentence patterns, tone
 
-Format your response EXACTLY as:
+Generate exactly three items formatted as:
 SUBJECT: [subject line here]
 
 BODY:
@@ -116,37 +212,34 @@ BODY:
 FOLLOW_UP:
 [follow-up here]"""
 
-        user_prompt = f"""Generate a cold email with the following details:
+        user_prompt = f"""Create a cold email:
 
 SENDER:
 - Name: {request.sender_name}
 - Role: {request.sender_role}
-- Offer: {request.sender_offer}
+- What they offer: {request.sender_offer}
 
 RECIPIENT:
 - Name: {request.recipient_name}
 - Role/Company: {request.recipient_role_company}
-- Context/Pain Points: {request.recipient_context}
+- Context: {request.recipient_context}
 
-WRITING STYLE: {request.writing_style}{writing_sample_text}
+WRITING STYLE: {default_style}{writing_sample_text}
 
-Generate a subject line, email body, and follow-up email following all the rules."""
+Remember: No em dashes. No jargon. Sound human."""
 
-        # Initialize chat with Gemini
         chat = LlmChat(
             api_key=api_key,
             session_id=str(uuid.uuid4()),
             system_message=system_message
         ).with_model("gemini", "gemini-3-flash-preview")
 
-        # Send message
         user_message = UserMessage(text=user_prompt)
         response = await chat.send_message(user_message)
         
-        # Parse response
         response_text = response.strip()
         
-        # Extract subject, body, and follow-up
+        # Parse response
         subject_line = ""
         email_body = ""
         follow_up = ""
@@ -159,7 +252,6 @@ Generate a subject line, email body, and follow-up email following all the rules
             email_body = body_parts[0].strip()
             follow_up = body_parts[1].strip()
         else:
-            # Fallback parsing
             lines = response_text.split('\n')
             current_section = None
             temp_body = []
@@ -183,9 +275,21 @@ Generate a subject line, email body, and follow-up email following all the rules
             if temp_follow:
                 follow_up = '\n'.join(temp_follow)
         
-        # Ensure we have all parts
         if not subject_line or not email_body or not follow_up:
             raise HTTPException(status_code=500, detail="Failed to parse email generation response")
+        
+        # Save to history
+        history_doc = {
+            "id": str(uuid.uuid4()),
+            "user_id": current_user.id,
+            "subject_line": subject_line,
+            "email_body": email_body,
+            "follow_up": follow_up,
+            "sender_name": request.sender_name,
+            "recipient_name": request.recipient_name,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.email_history.insert_one(history_doc)
         
         return EmailGenerationResponse(
             subject_line=subject_line,
@@ -196,6 +300,7 @@ Generate a subject line, email body, and follow-up email following all the rules
     except Exception as e:
         logger.error(f"Error generating email: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to generate email: {str(e)}")
+
 
 # Include the router in the main app
 app.include_router(api_router)

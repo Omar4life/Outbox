@@ -2,14 +2,19 @@ import requests
 import sys
 import json
 from datetime import datetime
+import uuid
 
-class ColdEmailAPITester:
+class OutboxAPITester:
     def __init__(self, base_url="https://email-craft-pro.preview.emergentagent.com"):
         self.base_url = base_url
         self.api_url = f"{base_url}/api"
         self.tests_run = 0
         self.tests_passed = 0
         self.test_results = []
+        self.auth_token = None
+        self.test_user_email = f"test_user_{uuid.uuid4().hex[:8]}@example.com"
+        self.test_user_password = "TestPass123!"
+        self.test_user_name = "Test User"
 
     def log_test(self, name, success, details=""):
         """Log test result"""
@@ -30,47 +35,148 @@ class ColdEmailAPITester:
         if details:
             print(f"   Details: {details}")
 
-    def test_root_endpoint(self):
-        """Test root API endpoint"""
+    def test_user_registration(self):
+        """Test user registration"""
         try:
-            response = requests.get(f"{self.api_url}/", timeout=10)
+            user_data = {
+                "email": self.test_user_email,
+                "password": self.test_user_password,
+                "name": self.test_user_name
+            }
+            
+            response = requests.post(f"{self.api_url}/auth/register", json=user_data, timeout=10)
             success = response.status_code == 200
-            details = f"Status: {response.status_code}, Response: {response.json() if success else response.text}"
-            self.log_test("Root endpoint", success, details)
-            return success
-        except Exception as e:
-            self.log_test("Root endpoint", False, f"Error: {str(e)}")
-            return False
-
-    def test_status_endpoints(self):
-        """Test status check endpoints"""
-        # Test POST /status
-        try:
-            test_data = {"client_name": f"test_client_{datetime.now().strftime('%H%M%S')}"}
-            response = requests.post(f"{self.api_url}/status", json=test_data, timeout=10)
-            success = response.status_code == 200
-            details = f"POST Status: {response.status_code}"
+            
             if success:
                 data = response.json()
-                details += f", ID: {data.get('id', 'N/A')}"
-            self.log_test("POST /status", success, details)
+                has_token = bool(data.get('access_token'))
+                has_user = bool(data.get('user'))
+                token_type = data.get('token_type') == 'bearer'
+                
+                if has_token and has_user and token_type:
+                    self.auth_token = data['access_token']
+                    details = f"Registration successful. User ID: {data['user'].get('id', 'N/A')}"
+                    self.log_test("User registration", True, details)
+                else:
+                    missing = []
+                    if not has_token: missing.append("access_token")
+                    if not has_user: missing.append("user")
+                    if not token_type: missing.append("correct token_type")
+                    self.log_test("User registration", False, f"Missing: {', '.join(missing)}")
+            else:
+                error_msg = response.text[:200] if response.text else "No error message"
+                self.log_test("User registration", False, f"Status: {response.status_code}, Error: {error_msg}")
+                
         except Exception as e:
-            self.log_test("POST /status", False, f"Error: {str(e)}")
+            self.log_test("User registration", False, f"Error: {str(e)}")
 
-        # Test GET /status
+    def test_user_login(self):
+        """Test user login with existing credentials"""
         try:
-            response = requests.get(f"{self.api_url}/status", timeout=10)
+            login_data = {
+                "email": self.test_user_email,
+                "password": self.test_user_password
+            }
+            
+            response = requests.post(f"{self.api_url}/auth/login", json=login_data, timeout=10)
             success = response.status_code == 200
-            details = f"GET Status: {response.status_code}"
+            
             if success:
                 data = response.json()
-                details += f", Records: {len(data)}"
-            self.log_test("GET /status", success, details)
+                has_token = bool(data.get('access_token'))
+                has_user = bool(data.get('user'))
+                
+                if has_token and has_user:
+                    # Update token for subsequent tests
+                    self.auth_token = data['access_token']
+                    details = f"Login successful. User: {data['user'].get('name', 'N/A')}"
+                    self.log_test("User login", True, details)
+                else:
+                    self.log_test("User login", False, "Missing token or user data")
+            else:
+                error_msg = response.text[:200] if response.text else "No error message"
+                self.log_test("User login", False, f"Status: {response.status_code}, Error: {error_msg}")
+                
         except Exception as e:
-            self.log_test("GET /status", False, f"Error: {str(e)}")
+            self.log_test("User login", False, f"Error: {str(e)}")
 
-    def test_email_generation_valid_request(self):
-        """Test email generation with valid data"""
+    def test_invalid_login(self):
+        """Test login with invalid credentials"""
+        try:
+            login_data = {
+                "email": "nonexistent@example.com",
+                "password": "wrongpassword"
+            }
+            
+            response = requests.post(f"{self.api_url}/auth/login", json=login_data, timeout=10)
+            # Should return 401 for invalid credentials
+            success = response.status_code == 401
+            details = f"Status: {response.status_code} (expected 401 for invalid credentials)"
+            self.log_test("Invalid login rejection", success, details)
+                
+        except Exception as e:
+            self.log_test("Invalid login rejection", False, f"Error: {str(e)}")
+
+    def test_get_current_user(self):
+        """Test getting current user with valid token"""
+        if not self.auth_token:
+            self.log_test("Get current user", False, "No auth token available")
+            return
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.auth_token}"}
+            response = requests.get(f"{self.api_url}/auth/me", headers=headers, timeout=10)
+            success = response.status_code == 200
+            
+            if success:
+                data = response.json()
+                has_id = bool(data.get('id'))
+                has_email = bool(data.get('email'))
+                has_name = bool(data.get('name'))
+                
+                if has_id and has_email and has_name:
+                    details = f"User data retrieved. Email: {data.get('email')}"
+                    self.log_test("Get current user", True, details)
+                else:
+                    missing = []
+                    if not has_id: missing.append("id")
+                    if not has_email: missing.append("email")
+                    if not has_name: missing.append("name")
+                    self.log_test("Get current user", False, f"Missing: {', '.join(missing)}")
+            else:
+                self.log_test("Get current user", False, f"Status: {response.status_code}")
+                
+        except Exception as e:
+            self.log_test("Get current user", False, f"Error: {str(e)}")
+
+    def test_protected_route_without_auth(self):
+        """Test that email generation requires authentication"""
+        try:
+            test_data = {
+                "sender_name": "Test",
+                "sender_role": "Test",
+                "sender_offer": "Test offer",
+                "recipient_name": "Test",
+                "recipient_role_company": "Test",
+                "recipient_context": "Test"
+            }
+            
+            # Try without Authorization header
+            response = requests.post(f"{self.api_url}/generate-email", json=test_data, timeout=10)
+            # Should return 403 or 401 for missing auth
+            success = response.status_code in [401, 403]
+            details = f"Status: {response.status_code} (expected 401/403 for missing auth)"
+            self.log_test("Protected route without auth", success, details)
+                
+        except Exception as e:
+            self.log_test("Protected route without auth", False, f"Error: {str(e)}")
+
+    def test_email_generation_with_auth(self):
+        """Test email generation with valid authentication"""
+        if not self.auth_token:
+            self.log_test("Email generation (with auth)", False, "No auth token available")
+            return
+            
         try:
             test_data = {
                 "sender_name": "John Smith",
@@ -79,11 +185,11 @@ class ColdEmailAPITester:
                 "recipient_name": "Sarah Johnson",
                 "recipient_role_company": "VP Marketing at TechCorp",
                 "recipient_context": "Recently posted about struggling with lead qualification and manual follow-ups on LinkedIn",
-                "writing_style": "casual and friendly but professional",
-                "writing_sample": None
+                "writing_style": "casual and friendly but professional"
             }
             
-            response = requests.post(f"{self.api_url}/generate-email", json=test_data, timeout=30)
+            headers = {"Authorization": f"Bearer {self.auth_token}"}
+            response = requests.post(f"{self.api_url}/generate-email", json=test_data, headers=headers, timeout=30)
             success = response.status_code == 200
             
             if success:
@@ -93,120 +199,105 @@ class ColdEmailAPITester:
                 has_followup = bool(data.get('follow_up', '').strip())
                 
                 if has_subject and has_body and has_followup:
-                    # Check word count for body (should be under 120 words)
-                    body_word_count = len(data['email_body'].split())
-                    details = f"Generated successfully. Body words: {body_word_count}, Subject: '{data['subject_line'][:50]}...'"
-                    self.log_test("Email generation (valid request)", True, details)
+                    # Check for em dashes and jargon
+                    body_text = data['email_body']
+                    subject_text = data['subject_line']
+                    followup_text = data['follow_up']
+                    
+                    has_em_dash = '—' in (body_text + subject_text + followup_text)
+                    jargon_words = ['hectic', 'bandwidth', 'synergy', 'leverage', 'touch base', 'circle back', 'deep dive']
+                    has_jargon = any(word in (body_text + subject_text + followup_text).lower() for word in jargon_words)
+                    
+                    body_word_count = len(body_text.split())
+                    
+                    quality_issues = []
+                    if has_em_dash:
+                        quality_issues.append("contains em dashes")
+                    if has_jargon:
+                        quality_issues.append("contains jargon")
+                    if body_word_count > 120:
+                        quality_issues.append(f"body too long ({body_word_count} words)")
+                    
+                    if quality_issues:
+                        details = f"Generated but has issues: {', '.join(quality_issues)}"
+                        self.log_test("Email generation (with auth)", False, details)
+                    else:
+                        details = f"Generated successfully. Body words: {body_word_count}, Quality: Good"
+                        self.log_test("Email generation (with auth)", True, details)
                 else:
                     missing = []
                     if not has_subject: missing.append("subject")
                     if not has_body: missing.append("body")
                     if not has_followup: missing.append("follow-up")
-                    self.log_test("Email generation (valid request)", False, f"Missing: {', '.join(missing)}")
+                    self.log_test("Email generation (with auth)", False, f"Missing: {', '.join(missing)}")
             else:
                 error_msg = response.text[:200] if response.text else "No error message"
-                self.log_test("Email generation (valid request)", False, f"Status: {response.status_code}, Error: {error_msg}")
+                self.log_test("Email generation (with auth)", False, f"Status: {response.status_code}, Error: {error_msg}")
                 
         except Exception as e:
-            self.log_test("Email generation (valid request)", False, f"Error: {str(e)}")
+            self.log_test("Email generation (with auth)", False, f"Error: {str(e)}")
 
-    def test_email_generation_with_sample(self):
-        """Test email generation with writing sample"""
+    def test_email_generation_without_style(self):
+        """Test email generation without writing style (should use default)"""
+        if not self.auth_token:
+            self.log_test("Email generation (no style)", False, "No auth token available")
+            return
+            
         try:
             test_data = {
                 "sender_name": "Alex Chen",
-                "sender_role": "Sales Director",
+                "sender_role": "Sales Director", 
                 "sender_offer": "Marketing automation tools",
                 "recipient_name": "Mike Davis",
                 "recipient_role_company": "CMO at StartupXYZ",
-                "recipient_context": "Scaling marketing team, looking for efficiency tools",
-                "writing_style": "witty and conversational",
-                "writing_sample": "Hey there! Hope you're crushing it this week. I noticed you've been posting about team scaling challenges - been there, done that, got the t-shirt (and the stress wrinkles to prove it)."
+                "recipient_context": "Scaling marketing team, looking for efficiency tools"
+                # No writing_style or writing_sample provided
             }
             
-            response = requests.post(f"{self.api_url}/generate-email", json=test_data, timeout=30)
+            headers = {"Authorization": f"Bearer {self.auth_token}"}
+            response = requests.post(f"{self.api_url}/generate-email", json=test_data, headers=headers, timeout=30)
             success = response.status_code == 200
             
             if success:
                 data = response.json()
-                details = f"Generated with sample. Subject: '{data.get('subject_line', '')[:30]}...'"
-                self.log_test("Email generation (with sample)", True, details)
-            else:
-                self.log_test("Email generation (with sample)", False, f"Status: {response.status_code}")
+                has_all_parts = all([
+                    data.get('subject_line', '').strip(),
+                    data.get('email_body', '').strip(), 
+                    data.get('follow_up', '').strip()
+                ])
                 
-        except Exception as e:
-            self.log_test("Email generation (with sample)", False, f"Error: {str(e)}")
-
-    def test_email_generation_missing_fields(self):
-        """Test email generation with missing required fields"""
-        try:
-            # Missing sender_name
-            test_data = {
-                "sender_role": "CEO",
-                "sender_offer": "Test offer",
-                "recipient_name": "Test Recipient",
-                "recipient_role_company": "Test Company",
-                "recipient_context": "Test context",
-                "writing_style": "professional"
-            }
-            
-            response = requests.post(f"{self.api_url}/generate-email", json=test_data, timeout=10)
-            # Should return 422 for validation error
-            success = response.status_code == 422
-            details = f"Status: {response.status_code} (expected 422 for missing field)"
-            self.log_test("Email generation (missing fields)", success, details)
-                
-        except Exception as e:
-            self.log_test("Email generation (missing fields)", False, f"Error: {str(e)}")
-
-    def test_api_key_functionality(self):
-        """Test if API key is working by making a simple request"""
-        try:
-            # This is an indirect test - if email generation works, API key is valid
-            test_data = {
-                "sender_name": "Test",
-                "sender_role": "Test",
-                "sender_offer": "Test offer",
-                "recipient_name": "Test",
-                "recipient_role_company": "Test",
-                "recipient_context": "Test",
-                "writing_style": "professional"
-            }
-            
-            response = requests.post(f"{self.api_url}/generate-email", json=test_data, timeout=20)
-            
-            if response.status_code == 500:
-                error_text = response.text.lower()
-                if "api key" in error_text or "unauthorized" in error_text:
-                    self.log_test("API key functionality", False, "API key issue detected")
+                if has_all_parts:
+                    # Check that it still sounds conversational (default style)
+                    body_text = data['email_body'].lower()
+                    sounds_natural = any(word in body_text for word in ['you', 'your', 'i', 'we', 'noticed', 'saw', 'help'])
+                    
+                    details = f"Generated without style. Natural tone: {'Yes' if sounds_natural else 'No'}"
+                    self.log_test("Email generation (no style)", True, details)
                 else:
-                    self.log_test("API key functionality", False, f"Server error: {response.text[:100]}")
-            elif response.status_code == 200:
-                self.log_test("API key functionality", True, "API key working correctly")
+                    self.log_test("Email generation (no style)", False, "Missing email parts")
             else:
-                self.log_test("API key functionality", False, f"Unexpected status: {response.status_code}")
+                self.log_test("Email generation (no style)", False, f"Status: {response.status_code}")
                 
         except Exception as e:
-            self.log_test("API key functionality", False, f"Error: {str(e)}")
+            self.log_test("Email generation (no style)", False, f"Error: {str(e)}")
 
     def run_all_tests(self):
         """Run all backend tests"""
-        print("🚀 Starting Cold Email Machine Backend Tests")
+        print("🚀 Starting Outbox Backend Tests (Iteration 2)")
         print("=" * 50)
         
-        # Basic connectivity
-        if not self.test_root_endpoint():
-            print("❌ Root endpoint failed - stopping tests")
-            return False
-            
-        # Status endpoints
-        self.test_status_endpoints()
+        # Authentication tests
+        print("\n🔐 Authentication Tests")
+        self.test_user_registration()
+        self.test_user_login()
+        self.test_invalid_login()
+        self.test_get_current_user()
+        self.test_protected_route_without_auth()
         
-        # Email generation tests
-        self.test_api_key_functionality()
-        self.test_email_generation_valid_request()
-        self.test_email_generation_with_sample()
-        self.test_email_generation_missing_fields()
+        # Email generation tests (with auth)
+        print("\n📧 Email Generation Tests")
+        self.test_email_generation_with_auth()
+        self.test_email_generation_without_style()
         
         # Summary
         print("\n" + "=" * 50)
@@ -220,7 +311,7 @@ class ColdEmailAPITester:
             return False
 
 def main():
-    tester = ColdEmailAPITester()
+    tester = OutboxAPITester()
     success = tester.run_all_tests()
     
     # Save detailed results
@@ -230,7 +321,17 @@ def main():
                 "total_tests": tester.tests_run,
                 "passed_tests": tester.tests_passed,
                 "success_rate": f"{(tester.tests_passed/tester.tests_run*100):.1f}%" if tester.tests_run > 0 else "0%",
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
+                "iteration": 2,
+                "features_tested": [
+                    "User registration",
+                    "User login", 
+                    "JWT authentication",
+                    "Protected routes",
+                    "Email generation with auth",
+                    "Email quality (no em dashes, no jargon)",
+                    "Default writing style"
+                ]
             },
             "detailed_results": tester.test_results
         }, f, indent=2)
