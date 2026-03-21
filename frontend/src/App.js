@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import "@/App.css";
 import axios from "axios";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
-import { Copy, RefreshCw, Sparkles, ChevronDown, ChevronUp, Sun, Moon, LogOut, Send, Crown, MessageSquare } from "lucide-react";
+import { Copy, RefreshCw, Sparkles, ChevronDown, ChevronUp, Sun, Moon, LogOut, Send, Crown, MessageSquare, Check, X } from "lucide-react";
 import Landing from "./components/Landing";
 import Pricing from "./components/Pricing";
 
