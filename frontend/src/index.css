@@ -113,3 +113,10 @@ code {
         border-bottom-color: inherit;
     }
 }
+
+/* Hide Emergent badge */
+[class*="emergent-badge"],
+[class*="made-with"],
+[id*="emergent-badge"] {
+  display: none !important;
+}
