@@ -830,38 +830,80 @@ function Dashboard() {
 
 function SuccessPage() {
   const navigate = useNavigate();
-  const [status, setStatus] = useState('success');
+  const [status, setStatus] = useState('upgrading');
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    // Upgrade happened via webhook, just show success and redirect
-    const timer = setTimeout(() => {
-      // Refresh user data
-      const token = localStorage.getItem('token');
-      if (token) {
-        axios.get(`${API}/auth/me`, {
-          headers: { Authorization: `Bearer ${token}` }
-        }).then(response => {
-          localStorage.setItem('user', JSON.stringify(response.data));
-          navigate('/dashboard');
-        }).catch(() => {
-          navigate('/dashboard');
-        });
-      } else {
-        navigate('/dashboard');
-      }
-    }, 2000);
+    upgradeAccount();
+  }, []);
 
-    return () => clearTimeout(timer);
-  }, [navigate]);
+  const upgradeAccount = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        navigate('/auth?mode=login');
+        return;
+      }
+
+      // Force upgrade the user since payment was successful
+      const response = await axios.post(`${API}/upgrade-account`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      // Refresh user data
+      const userResponse = await axios.get(`${API}/auth/me`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      localStorage.setItem('user', JSON.stringify(userResponse.data));
+      setStatus('success');
+      
+      setTimeout(() => navigate('/dashboard'), 2000);
+    } catch (err) {
+      console.error('Upgrade error:', err);
+      setError(err.response?.data?.detail || 'Failed to upgrade account');
+      setStatus('error');
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl border border-gray-200 p-8 text-center">
-        <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <Check className="w-8 h-8 text-green-600" />
-        </div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Payment Successful!</h2>
-        <p className="text-gray-600 mb-4">Welcome to Pro. Redirecting to dashboard...</p>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center px-4">
+      <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 p-8 text-center">
+        {status === 'upgrading' && (
+          <>
+            <div className="w-16 h-16 bg-indigo-100 dark:bg-indigo-900 rounded-full flex items-center justify-center mx-auto mb-4">
+              <RefreshCw className="w-8 h-8 text-indigo-600 dark:text-indigo-400 animate-spin" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Upgrading your account...</h2>
+            <p className="text-gray-600 dark:text-gray-400">Please wait a moment</p>
+          </>
+        )}
+        
+        {status === 'success' && (
+          <>
+            <div className="w-16 h-16 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Check className="w-8 h-8 text-green-600 dark:text-green-400" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Welcome to Pro! 🎉</h2>
+            <p className="text-gray-600 dark:text-gray-400 mb-4">You now have unlimited emails and Reply Handler</p>
+          </>
+        )}
+        
+        {status === 'error' && (
+          <>
+            <div className="w-16 h-16 bg-red-100 dark:bg-red-900 rounded-full flex items-center justify-center mx-auto mb-4">
+              <X className="w-8 h-8 text-red-600 dark:text-red-400" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Upgrade Error</h2>
+            <p className="text-gray-600 dark:text-gray-400 mb-4">{error}</p>
+            <button
+              onClick={() => navigate('/dashboard')}
+              className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-all"
+            >
+              Go to Dashboard
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

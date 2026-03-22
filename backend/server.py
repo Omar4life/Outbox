@@ -242,6 +242,46 @@ async def get_usage(current_user: User = Depends(get_current_user)):
         subscription_tier=tier
     )
 
+@api_router.post("/upgrade-account")
+async def upgrade_account(current_user: User = Depends(get_current_user)):
+    """Force upgrade user to Pro after successful payment"""
+    try:
+        # Check if there's a recent successful payment transaction
+        recent_transaction = await db.payment_transactions.find_one(
+            {
+                "user_id": current_user.id,
+                "payment_status": {"$in": ["pending", "paid"]}
+            },
+            {"_id": 0},
+            sort=[("created_at", -1)]
+        )
+        
+        if not recent_transaction:
+            raise HTTPException(status_code=400, detail="No recent payment found")
+        
+        # Upgrade user to Pro
+        await db.users.update_one(
+            {"id": current_user.id},
+            {"$set": {
+                "subscription_tier": "pro",
+                "subscription_status": "active",
+                "upgraded_at": datetime.now(timezone.utc).isoformat()
+            }}
+        )
+        
+        # Mark transaction as processed
+        await db.payment_transactions.update_one(
+            {"id": recent_transaction["id"]},
+            {"$set": {"payment_status": "paid", "processed_at": datetime.now(timezone.utc).isoformat()}}
+        )
+        
+        return {"success": True, "message": "Upgraded to Pro successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Upgrade error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Email Generation
 @api_router.post("/generate-email", response_model=EmailGenerationResponse)
 async def generate_email(request: EmailGenerationRequest, current_user: User = Depends(get_current_user)):
